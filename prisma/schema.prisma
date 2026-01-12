@@ -1,0 +1,91 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// EMAIL MODULE MODELS
+// ==========================================
+
+model Email {
+  id          String    @id @default(cuid())
+  from        String
+  to          String
+  cc          String?
+  bcc         String?
+  subject     String
+  textBody    String?   @map("text_body")
+  htmlBody    String?   @map("html_body")
+  headers     Json?
+  metadata    Json?
+  processed   Boolean   @default(false)
+  processedAt DateTime? @map("processed_at")
+  receivedAt  DateTime  @default(now()) @map("received_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  attachments Attachment[]
+  autoReplies AutoReply[]
+
+  @@map("emails")
+}
+
+model Attachment {
+  id          String    @id @default(cuid())
+  emailId     String    @map("email_id")
+  filename    String
+  contentType String    @map("content_type")
+  size        Int
+  storagePath String?   @map("storage_path")
+  storageUrl  String?   @map("storage_url")
+  contentId   String?   @map("content_id")
+  processed   Boolean   @default(false)
+  processedAt DateTime? @map("processed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  email Email @relation(fields: [emailId], references: [id], onDelete: Cascade)
+
+  @@index([emailId])
+  @@map("attachments")
+}
+
+model AutoReply {
+  id        String    @id @default(cuid())
+  emailId   String    @map("email_id")
+  to        String
+  subject   String
+  body      String
+  sentAt    DateTime? @map("sent_at")
+  status    String    @default("pending") // pending, sent, failed
+  error     String?
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  email Email @relation(fields: [emailId], references: [id], onDelete: Cascade)
+
+  @@index([emailId])
+  @@map("auto_replies")
+}
+
+// ==========================================
+// PHONE MODULE MODELS (Future - Twilio)
+// ==========================================
+
+// model Call {
+//   id          String   @id @default(cuid())
+//   from        String
+//   to          String
+//   status      String
+//   duration    Int?
+//   recordingUrl String?
+//   createdAt   DateTime @default(now())
+//   @@map("calls")
+// }

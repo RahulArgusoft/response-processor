@@ -1,0 +1,51 @@
+# Full stack compose - runs both app and DB
+# Usage: docker compose up --build
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: response-processor-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/response_processor?schema=public
+      - DB_HOST=db
+      - DB_PORT=5432
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  db:
+    image: postgres:17
+    container_name: response-processor-db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=response_processor
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5436:5432" # Using 5436 to avoid conflicts with other projects
+    networks:
+      - app-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d response_processor" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres_data:
+
+
+networks:
+  app-network:
+    driver: bridge
