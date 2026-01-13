@@ -33,8 +33,8 @@ response-processor/
 │           ├── database/
 │           └── utils/
 │
-├── Dockerfile
-├── docker-compose.yml
+├── prisma/                     # Database schema & migrations
+├── render.yaml                 # Render deployment config
 └── .env.example
 ```
 
@@ -43,8 +43,8 @@ response-processor/
 ### Prerequisites
 
 - Node.js 20+
-- npm or yarn
-- PostgreSQL (optional, for database features)
+- npm
+- PostgreSQL database
 
 ### Installation
 
@@ -55,19 +55,58 @@ npm install
 # Copy environment file
 cp .env.example .env
 
-# Start in development mode
-npm run start:dev
+# Generate Prisma client
+npm run prisma:generate
+
+# Run database migrations (if database is set up)
+npm run prisma:migrate
 ```
 
-### With Docker
+### Local Development
 
 ```bash
-# Start with Docker Compose (includes PostgreSQL)
-docker-compose up -d
+# Start in development mode (with hot reload)
+npm run start:dev
 
-# Or build and run just the app
-docker build -t response-processor .
-docker run -p 3000:3000 response-processor
+# Or build and run production-like
+npm run build
+npm run start:prod
+```
+
+This mirrors the production flow on Render.
+
+## Deployment
+
+### How Render Deploys This App
+
+Render uses the `render.yaml` Blueprint for configuration:
+
+```
+BUILD PHASE (npm run render:build)
+├── npm ci                    # Install dependencies
+├── prisma generate           # Generate Prisma client
+└── nest build               # Compile TypeScript → dist/
+
+START PHASE (npm run render:start)
+├── prisma migrate deploy    # Run pending DB migrations
+└── node dist/src/main       # Start the application
+```
+
+### Deploy to Render
+
+1. Push your code to GitHub
+2. Create a new **Blueprint** on Render
+3. Connect your GitHub repository
+4. Render auto-detects `render.yaml` and sets everything up
+
+### Environment Variables
+
+Set these in Render dashboard or `.env` locally:
+
+```
+NODE_ENV=production
+PORT=10000
+DATABASE_URL=<your-database-url>
 ```
 
 ## API Endpoints
@@ -78,7 +117,7 @@ docker run -p 3000:3000 response-processor
 |----------|-------------|
 | `GET /api/health` | Basic health status |
 | `GET /api/health/detailed` | Detailed health with services |
-| `GET /api/health/live` | Liveness probe (for K8s/Render) |
+| `GET /api/health/live` | Liveness probe |
 | `GET /api/health/ready` | Readiness probe |
 
 ### Email Module
@@ -87,34 +126,6 @@ docker run -p 3000:3000 response-processor
 |----------|-------------|
 | `POST /api/email/inbound` | Webhook for inbound emails |
 | `GET /api/email/status` | Email module status |
-
-## Deployment to Render
-
-### Option 1: Docker Deployment (Recommended)
-
-1. Push your code to GitHub
-2. Create a new **Web Service** on Render
-3. Connect your GitHub repository
-4. Render will auto-detect the Dockerfile
-5. Set environment variables in Render dashboard
-
-### Option 2: Native Deployment
-
-1. Push your code to GitHub
-2. Create a new **Web Service** on Render
-3. Select **Node** as the environment
-4. Set build command: `npm install && npm run build`
-5. Set start command: `npm run start:prod`
-
-### Environment Variables (Render)
-
-```
-NODE_ENV=production
-PORT=10000
-DATABASE_URL=<your-database-url>
-EMAIL_PROVIDER=sendgrid
-SENDGRID_API_KEY=<your-api-key>
-```
 
 ## Modules
 
@@ -125,8 +136,6 @@ Handles inbound email processing:
 - Process attachments
 - Send auto-replies
 
-**Supported Providers**: SendGrid, Mailgun (coming soon)
-
 ### Phone Module (Planned)
 
 Will handle phone/SMS communications via Twilio:
@@ -134,23 +143,28 @@ Will handle phone/SMS communications via Twilio:
 - SMS processing
 - Voice transcription
 
-## Development
+## Development Commands
 
 ```bash
-# Run in development mode
-npm run start:dev
+# Development
+npm run start:dev          # Start with hot reload
 
-# Run tests
-npm test
+# Production
+npm run build              # Build TypeScript
+npm run start:prod         # Run compiled app
 
-# Run e2e tests
-npm run test:e2e
+# Database
+npm run prisma:generate    # Generate Prisma client
+npm run prisma:migrate     # Deploy migrations
+npm run prisma:studio      # Open Prisma Studio
 
-# Lint code
-npm run lint
+# Testing
+npm test                   # Run unit tests
+npm run test:e2e           # Run e2e tests
 
-# Format code
-npm run format
+# Code Quality
+npm run lint               # Lint code
+npm run format             # Format code
 ```
 
 ## License
