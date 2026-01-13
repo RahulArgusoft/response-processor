@@ -11,6 +11,3 @@ coverage
 .vscode
 .idea
 *.log
-.dockerignore
-Dockerfile
-docker-compose.yml
