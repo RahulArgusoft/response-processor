@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Get, Logger, Query } from '@nestjs/common';
 import { EmailParserService } from '../services/email-parser.service';
 import { AttachmentService } from '../services/attachment.service';
 import { AutoReplyService } from '../services/auto-reply.service';
@@ -13,6 +13,21 @@ export class InboundEmailController {
         private readonly attachmentService: AttachmentService,
         private readonly autoReplyService: AutoReplyService,
     ) { }
+
+    /**
+     * Get all emails with optional pagination
+     * GET /api/email?skip=0&take=50
+     */
+    @Get()
+    async getAllEmails(
+        @Query('skip') skip?: string,
+        @Query('take') take?: string,
+    ) {
+        return this.emailParserService.getAllEmails({
+            skip: skip ? parseInt(skip, 10) : undefined,
+            take: take ? parseInt(take, 10) : undefined,
+        });
+    }
 
     /**
      * Webhook endpoint for receiving inbound emails

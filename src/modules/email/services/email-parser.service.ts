@@ -71,6 +71,31 @@ export class EmailParserService {
     }
 
     /**
+     * Get all emails with optional pagination
+     */
+    async getAllEmails(options?: { skip?: number; take?: number }) {
+        const [emails, total] = await Promise.all([
+            this.prisma.email.findMany({
+                skip: options?.skip || 0,
+                take: options?.take || 50,
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    attachments: true,
+                    autoReplies: true,
+                },
+            }),
+            this.prisma.email.count(),
+        ]);
+
+        return {
+            data: emails,
+            total,
+            skip: options?.skip || 0,
+            take: options?.take || 50,
+        };
+    }
+
+    /**
      * Extract metadata from email headers
      */
     extractMetadata(headers: Record<string, string>): Record<string, any> {
