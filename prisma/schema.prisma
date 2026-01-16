@@ -76,16 +76,37 @@ model AutoReply {
 }
 
 // ==========================================
-// PHONE MODULE MODELS (Future - Twilio)
+// PHONE MODULE MODELS (Twilio)
 // ==========================================
 
-// model Call {
-//   id          String   @id @default(cuid())
-//   from        String
-//   to          String
-//   status      String
-//   duration    Int?
-//   recordingUrl String?
-//   createdAt   DateTime @default(now())
-//   @@map("calls")
-// }
+model Call {
+  id        String    @id @default(cuid())
+  callSid   String    @unique @map("call_sid")
+  from      String
+  to        String
+  direction String    @default("inbound")
+  status    String    @default("initiated")
+  duration  Int?
+  // recordUrl String?   @map("record_url")   // will add the call recording in twilio first with <Record>
+  startedAt DateTime  @default(now()) @map("started_at")
+  endedAt   DateTime? @map("ended_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  messages CallMessage[]
+
+  @@map("calls")
+}
+
+model CallMessage {
+  id        String   @id @default(cuid())
+  callId    String   @map("call_id")
+  role      String // 'user' or 'assistant'
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([callId])
+  @@map("call_messages")
+}

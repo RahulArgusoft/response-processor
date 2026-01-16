@@ -1,8 +1,9 @@
-import { Controller, Post, Body, Get, Logger, Res } from '@nestjs/common';
+import { Controller, Post, Body, Get, Logger, Res, Query } from '@nestjs/common';
 import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { TwilioService } from './twilio.service';
 import { TwilioSessionService } from './twilio-session.service';
+import { CallService } from './call.service';
 import { AiGatewayService } from '../ai/ai-gateway.service';
 
 interface TwilioVoiceWebhookBody {
@@ -13,6 +14,7 @@ interface TwilioVoiceWebhookBody {
     Direction: string;
     SpeechResult?: string;
     Confidence?: string;
+    CallDuration?: string;
 }
 
 @Controller('twilio')
@@ -23,6 +25,7 @@ export class TwilioController {
     constructor(
         private readonly twilioService: TwilioService,
         private readonly sessionService: TwilioSessionService,
+        private readonly callService: CallService,
         private readonly aiGatewayService: AiGatewayService,
         private readonly configService: ConfigService,
     ) {
@@ -42,6 +45,14 @@ export class TwilioController {
 
         // Create session for this call
         this.sessionService.getOrCreateSession(body.CallSid, body.From, body.To);
+
+        // Save call to database (fire and forget - don't block response)
+        this.callService.createCall({
+            callSid: body.CallSid,
+            from: body.From,
+            to: body.To,
+            direction: body.Direction || 'inbound',
+        }).catch(err => this.logger.error('Failed to save call to DB', err));
 
         // Generate greeting TwiML
         const twimlResponse = this.twilioService.generateGreeting(this.webhookUrl);
@@ -67,7 +78,7 @@ export class TwilioController {
             if (!SpeechResult) {
                 // No speech detected, generate re-prompt
                 twimlResponse = this.twilioService.generateGreeting(this.webhookUrl);
-            } else if(Confidence && parseFloat(Confidence) < 0.5) {
+            } else if (Confidence && parseFloat(Confidence) < 0.5) {
                 // Low confidence, generate re-prompt
                 twimlResponse = this.twilioService.generateGreeting(this.webhookUrl, true);
 
@@ -80,6 +91,10 @@ export class TwilioController {
                 } else {
                     // Add user message to session
                     this.sessionService.addMessage(CallSid, 'user', SpeechResult);
+
+                    // Save user message to database (fire and forget)
+                    this.callService.addMessage(CallSid, 'user', SpeechResult)
+                        .catch(err => this.logger.error('Failed to save user message', err));
 
                     // Get conversation history for context
                     const history = this.sessionService.getConversationHistory(CallSid);
@@ -95,6 +110,10 @@ export class TwilioController {
 
                     // Add AI response to session
                     this.sessionService.addMessage(CallSid, 'assistant', aiResponse);
+
+                    // Save AI response to database (fire and forget)
+                    this.callService.addMessage(CallSid, 'assistant', aiResponse)
+                        .catch(err => this.logger.error('Failed to save AI message', err));
 
                     // Generate TwiML response
                     twimlResponse = this.twilioService.generateAIResponse(aiResponse, this.webhookUrl);
@@ -114,8 +133,13 @@ export class TwilioController {
      */
     @Post('voice/status')
     async handleCallStatus(@Body() body: TwilioVoiceWebhookBody) {
-        const { CallSid, CallStatus } = body;
+        const { CallSid, CallStatus, CallDuration } = body;
         this.logger.log(`Call ${CallSid} status changed to: ${CallStatus}`);
+
+        // Update call status in database
+        const duration = CallDuration ? parseInt(CallDuration, 10) : undefined;
+        this.callService.updateCallStatus(CallSid, CallStatus, duration)
+            .catch(err => this.logger.error('Failed to update call status', err));
 
         // Cleanup session when call ends
         if (['completed', 'busy', 'failed', 'no-answer', 'canceled'].includes(CallStatus)) {
@@ -124,6 +148,21 @@ export class TwilioController {
                 this.logger.log(`Call ${CallSid} ended. Total messages: ${session.messages.length}`);
             }
         }
+    }
+
+    /**
+     * Get all calls (for debugging/admin)
+     */
+    @Get('calls')
+    async getCalls(
+        @Query('skip') skip?: string,
+        @Query('take') take?: string,
+    ) {
+        const result = await this.callService.getAllCalls(
+            skip ? parseInt(skip, 10) : 0,
+            take ? parseInt(take, 10) : 20,
+        );
+        return result;
     }
 
     /**
